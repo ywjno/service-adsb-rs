@@ -1,0 +1,7 @@
+[receiver]
+ip = "RECEIVER-IP"
+port = RECEIVER-PORT
+
+[service]
+url = "YOUR-SERVICE-URL"
+uuid = "YOUR-UUID"

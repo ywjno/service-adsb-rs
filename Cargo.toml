@@ -1,0 +1,26 @@
+[package]
+name = "service-adsb-rs"
+version = "0.1.0"
+description = "This is ADSB upload program written in Rust, suitable for various platforms that support Rust compilation."
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "adsb"
+path = "src/main.rs"
+
+[profile.release]
+strip = "symbols"
+
+[dependencies]
+base64 = "0.22"
+chrono = "0.4"
+clap = { version = "4.5", features = ["cargo", "derive"] }
+env_logger = "0.11"
+flate2 = "1.0"
+form_urlencoded = "1.2"
+log = "0.4"
+reqwest = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+tokio = { version = "1", features = ["full"] }
