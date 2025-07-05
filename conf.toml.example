@@ -5,3 +5,5 @@ port = RECEIVER-PORT
 [service]
 url = "YOUR-SERVICE-URL"
 uuid = "YOUR-UUID"
+
+dashboard_port = 8080

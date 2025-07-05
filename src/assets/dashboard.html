@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ADSB Service Dashboard</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        font-weight: 300;
+      }
+
+      .header p {
+        font-size: 1.1em;
+        opacity: 0.9;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        padding: 30px;
+      }
+
+      .stat-card {
+        background: white;
+        border-radius: 10px;
+        padding: 25px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        border-left: 4px solid #3498db;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+      }
+
+      .stat-title {
+        font-size: 0.9em;
+        color: #7f8c8d;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+      }
+
+      .stat-value {
+        font-size: 2.5em;
+        font-weight: 700;
+        color: #2c3e50;
+        margin-bottom: 5px;
+      }
+
+      .stat-unit {
+        font-size: 0.9em;
+        color: #95a5a6;
+      }
+
+      .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+        animation: pulse 2s infinite;
+      }
+
+      .status-online {
+        background-color: #27ae60;
+      }
+
+      .status-offline {
+        background-color: #e74c3c;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      .last-update {
+        text-align: center;
+        padding: 20px;
+        color: #7f8c8d;
+        font-size: 0.9em;
+      }
+
+      .error-message {
+        background: #e74c3c;
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 20px;
+        text-align: center;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #7f8c8d;
+      }
+
+      .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #3498db;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>ADSB Service Dashboard</h1>
+        <p>Real-time monitoring and statistics</p>
+      </div>
+
+      <div id="content">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading statistics...</p>
+        </div>
+      </div>
+
+      <div class="last-update">
+        Last updated: <span id="last-update">Never</span>
+      </div>
+    </div>
+
+    <script>
+      let isOnline = false;
+
+      function formatNumber(num) {
+        return new Intl.NumberFormat().format(num);
+      }
+
+      function formatDuration(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+
+        if (hours > 0) {
+          return `${hours}h ${minutes}m ${secs}s`;
+        } else if (minutes > 0) {
+          return `${minutes}m ${secs}s`;
+        } else {
+          return `${secs}s`;
+        }
+      }
+
+      function formatDateTime(dateString) {
+        if (!dateString) return "Never";
+        const date = new Date(dateString);
+        return date.toLocaleString();
+      }
+
+      function formatMemory(mb) {
+        if (mb === 0) return "N/A";
+        return mb.toFixed(1);
+      }
+
+      function updateStats() {
+        fetch("../api/stats")
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then((data) => {
+            if (data.success && data.data) {
+              const stats = data.data;
+              isOnline = true;
+
+              document.getElementById("content").innerHTML = `
+                            <div class="stats-grid">
+                                <div class="stat-card">
+                                    <div class="stat-title">Service Status</div>
+                                    <div class="stat-value">
+                                        <span class="status-indicator status-online"></span>
+                                        Online
+                                    </div>
+                                    <div class="stat-unit">Service is running</div>
+                                </div>
+
+                                <div class="stat-card">
+                                    <div class="stat-title">Total Messages</div>
+                                    <div class="stat-value">${formatNumber(
+                                      stats.total_messages
+                                    )}</div>
+                                    <div class="stat-unit">messages received</div>
+                                </div>
+
+                                <div class="stat-card">
+                                    <div class="stat-title">Messages per Minute</div>
+                                    <div class="stat-value">${formatNumber(
+                                      stats.messages_per_minute
+                                    )}</div>
+                                    <div class="stat-unit">messages/min</div>
+                                </div>
+
+                                <div class="stat-card">
+                                    <div class="stat-title">Uptime</div>
+                                    <div class="stat-value">${formatDuration(
+                                      stats.uptime_seconds
+                                    )}</div>
+                                    <div class="stat-unit">since ${formatDateTime(
+                                      stats.start_time
+                                    )}</div>
+                                </div>
+
+                                <div class="stat-card">
+                                    <div class="stat-title">Last Message</div>
+                                    <div class="stat-value">${formatDateTime(
+                                      stats.last_message_time
+                                    )}</div>
+                                    <div class="stat-unit">timestamp</div>
+                                </div>
+
+                                <div class="stat-card">
+                                    <div class="stat-title">Current Memory</div>
+                                    <div class="stat-value">${formatMemory(
+                                      stats.memory_usage_mb
+                                    )}</div>
+                                    <div class="stat-unit">MB</div>
+                                </div>
+
+                                <div class="stat-card">
+                                    <div class="stat-title">Peak Memory</div>
+                                    <div class="stat-value">${formatMemory(
+                                      stats.memory_peak_mb
+                                    )}</div>
+                                    <div class="stat-unit">MB</div>
+                                </div>
+                            </div>
+                        `;
+            } else {
+              throw new Error(data.message || "Failed to load statistics");
+            }
+          })
+          .catch((error) => {
+            console.error("Error fetching stats:", error);
+            isOnline = false;
+
+            document.getElementById("content").innerHTML = `
+                        <div class="error-message">
+                            <strong>Connection Error</strong><br>
+                            Unable to fetch statistics from the service.<br>
+                            Error: ${error.message}
+                        </div>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-title">Service Status</div>
+                                <div class="stat-value">
+                                    <span class="status-indicator status-offline"></span>
+                                    Offline
+                                </div>
+                                <div class="stat-unit">Service is not responding</div>
+                            </div>
+                        </div>
+                    `;
+          })
+          .finally(() => {
+            document.getElementById("last-update").textContent =
+              new Date().toLocaleString();
+          });
+      }
+
+      // Initial load
+      updateStats();
+
+      // Update every 5 seconds
+      setInterval(updateStats, 5000);
+    </script>
+  </body>
+</html>

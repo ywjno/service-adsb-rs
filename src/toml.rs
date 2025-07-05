@@ -1,18 +1,28 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub receiver: Receiver,
     pub service: Service,
+    #[serde(default = "default_dashboard_port")]
+    pub dashboard_port: u16,
+}
+
+fn default_dashboard_port() -> u16 {
+    8080
 }
 
 impl Config {
-    pub fn new(receiver: Receiver, service: Service) -> Self {
-        Config { receiver, service }
+    pub fn new(receiver: Receiver, service: Service, dashboard_port: u16) -> Self {
+        Config {
+            receiver,
+            service,
+            dashboard_port,
+        }
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Receiver {
     pub ip: String,
     pub port: u16,
@@ -24,7 +34,7 @@ impl Receiver {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Service {
     pub url: String,
     pub uuid: String,

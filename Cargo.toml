@@ -1,8 +1,9 @@
 [package]
 name = "service-adsb-rs"
-version = "0.1.0"
+version = "0.2.0"
 description = "This is ADSB upload program written in Rust, suitable for various platforms that support Rust compilation."
-edition = "2021"
+edition = "2024"
+rust-version = "1.85.0"
 license = "MIT OR Apache-2.0"
 
 [[bin]]
@@ -12,15 +13,25 @@ path = "src/main.rs"
 [profile.release]
 strip = "symbols"
 
+[build-dependencies]
+built = "0.8"
+
 [dependencies]
+anyhow = "1.0"
 base64 = "0.22"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["cargo", "derive"] }
 env_logger = "0.11"
 flate2 = "1.0"
 form_urlencoded = "1.2"
+lazy_static = "1.4"
 log = "0.4"
-reqwest = { version="0.12", features = ["rustls-tls"] }
+once_cell = "1.19"
+reqwest = { version="0.12", default-features = false, features = ["rustls-tls", "json", "charset", "http2"] }
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+serde_json = "1.0"
+sysinfo = { version = "0.36", features = ["multithread"] }
+toml = "0.9"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
+url = "2.5"
+warp = { version = "0.4", features = ["server"] }
