@@ -1,0 +1,355 @@
+# ==============================================================================
+# GitHub Actions Workflow for ADS-B Service Release
+# Builds multi-platform binaries using the existing justfile system
+# ==============================================================================
+
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create GitHub release"
+        required: false
+        default: true
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: never
+  RUST_BACKTRACE: 1
+
+jobs:
+  # =============================================================================
+  # Quality Assurance Job
+  # Run tests, formatting, and linting before building
+  # =============================================================================
+  test:
+    name: Test and Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: test-${{ runner.os }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Check documentation
+        run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # =============================================================================
+  # Multi-platform Build Job
+  # Uses justfile commands for consistency with local development
+  # =============================================================================
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    needs: test
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Tier 1 platforms - primary support
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            just_target: linux-amd64
+            asset_name: adsb-linux-amd64
+
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            just_target: linux-arm64
+            asset_name: adsb-linux-arm64
+
+          - target: universal2-apple-darwin
+            runner: macos-latest # Native compilation
+            just_target: universal2-apple-darwin
+            asset_name: adsb-darwin-universal2
+
+          - target: x86_64-pc-windows-gnu
+            runner: ubuntu-latest
+            just_target: windows-amd64
+            asset_name: adsb-windows-amd64.exe
+
+          # Tier 2 platforms - secondary support
+          - target: i686-unknown-linux-gnu
+            runner: ubuntu-latest
+            just_target: linux-386
+            asset_name: adsb-linux-386
+
+          - target: arm-unknown-linux-gnueabihf
+            runner: ubuntu-latest
+            just_target: linux-armv6
+            asset_name: adsb-linux-armv6
+
+          - target: armv7-unknown-linux-gnueabihf
+            runner: ubuntu-latest
+            just_target: linux-armv7
+            asset_name: adsb-linux-armv7
+
+          # Experimental platforms
+          - target: riscv64gc-unknown-linux-gnu
+            runner: ubuntu-latest
+            just_target: linux-riscv64
+            asset_name: adsb-linux-riscv64
+
+          - target: loongarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            just_target: linux-loongarch
+            asset_name: adsb-linux-loongarch
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: ${{ matrix.target == 'universal2-apple-darwin' && 'x86_64-apple-darwin,aarch64-apple-darwin' || matrix.target }}
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: build-${{ matrix.target }}-${{ runner.os }}
+
+      - name: Install Zig (for cross-compilation)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: "0.15.1"
+
+      - name: Install build dependencies
+        run: |
+          # Install MinGW for Windows cross-compilation (only on Ubuntu)
+          if [[ "${{ matrix.runner }}" == "ubuntu-latest" && "${{ matrix.target }}" == *"windows"* ]]; then
+            sudo apt-get update
+            sudo apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
+            echo "MinGW toolchain installed"
+          fi
+
+          cargo install just cargo-zigbuild
+          echo "Build environment ready"
+
+      - name: Build using justfile
+        run: |
+          echo "Building target: ${{ matrix.just_target }}"
+          just build-${{ matrix.just_target }}
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Verify and prepare binary
+        run: |
+          echo "Verifying build output..."
+          just verify-build ${{ matrix.just_target }}
+
+          # Use justfile's output path directly
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            binary_path="target/release/adsb-${{ github.ref_name }}-${{ matrix.just_target }}.exe"
+          else
+            binary_path="target/release/adsb-${{ github.ref_name }}-${{ matrix.just_target }}"
+          fi
+
+          # Verify binary exists and copy to artifact name
+          if [[ -f "$binary_path" ]]; then
+            cp "$binary_path" "${{ matrix.asset_name }}"
+            echo "Binary prepared: ${{ matrix.asset_name }}"
+            ls -la "${{ matrix.asset_name }}"
+          else
+            echo "Error: Binary not found at expected path: $binary_path"
+            echo "Available files in target/release:"
+            ls -la target/release/ || echo "target/release directory not found"
+            echo "Available files in target:"
+            find target -name "*adsb*" -type f 2>/dev/null || echo "No adsb files found"
+            exit 1
+          fi
+
+      - name: Create compressed archive
+        run: |
+          # Create compressed archive based on platform
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            # Windows: Create ZIP archive
+            echo "Creating ZIP archive for Windows..."
+            zip -j "${{ matrix.asset_name }}.zip" "${{ matrix.asset_name }}"
+            ARCHIVE_NAME="${{ matrix.asset_name }}.zip"
+          else
+            # Unix-like: Create tar.gz archive
+            echo "Creating tar.gz archive for Unix-like system..."
+            tar -czf "${{ matrix.asset_name }}.tar.gz" "${{ matrix.asset_name }}"
+            ARCHIVE_NAME="${{ matrix.asset_name }}.tar.gz"
+          fi
+
+          echo "Archive created: $ARCHIVE_NAME"
+          ls -la "$ARCHIVE_NAME"
+
+          # Store archive name for next step
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Generate checksums
+        run: |
+          # Generate checksum for the compressed archive
+          if command -v shasum >/dev/null; then
+            shasum -a 256 "$ARCHIVE_NAME" > "$ARCHIVE_NAME.sha256"
+          elif command -v sha256sum >/dev/null; then
+            sha256sum "$ARCHIVE_NAME" > "$ARCHIVE_NAME.sha256"
+          else
+            echo "No SHA256 utility found"
+            exit 1
+          fi
+
+          echo "Checksum generated:"
+          cat "$ARCHIVE_NAME.sha256"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: |
+            ${{ env.ARCHIVE_NAME }}
+            ${{ env.ARCHIVE_NAME }}.sha256
+          retention-days: 30
+
+  # =============================================================================
+  # Release Job
+  # Creates GitHub release with all platform binaries
+  # =============================================================================
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.create_release)
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history for changelog generation
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Prepare release assets
+        run: |
+          echo "Organizing release assets..."
+          mkdir -p release/
+
+          # Move all compressed archives and checksums to release directory
+          find artifacts/ -name "*.tar.gz" -type f -exec mv {} release/ \;
+          find artifacts/ -name "*.zip" -type f -exec mv {} release/ \;
+          find artifacts/ -name "*.sha256" -type f -exec mv {} release/ \;
+
+          echo "Release assets:"
+          ls -la release/
+
+          # Create release notes
+          echo "## What's New" > release_notes.md
+          echo "" >> release_notes.md
+          echo "This release includes improvements to stability, performance, and cross-platform compatibility." >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Download Instructions" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Quick Platform Guide" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **Linux (x64)**: \`adsb-linux-amd64.tar.gz\`" >> release_notes.md
+          echo "- **Linux (ARM64)**: \`adsb-linux-arm64.tar.gz\` - Perfect for Raspberry Pi 4+, Rock Pi, and modern ARM boards" >> release_notes.md
+          echo "- **macOS (Universal)**: \`adsb-darwin-universal2.tar.gz\` - Works on both Intel and Apple Silicon Macs" >> release_notes.md
+          echo "- **Windows (x64)**: \`adsb-windows-amd64.zip\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Raspberry Pi Support" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Choose the right version for your Raspberry Pi:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **Pi Zero/1**: \`adsb-linux-armv6.tar.gz\` (ARMv6)" >> release_notes.md
+          echo "- **Pi 2/3**: \`adsb-linux-armv7.tar.gz\` (ARMv7)" >> release_notes.md
+          echo "- **Pi 4/5**: \`adsb-linux-arm64.tar.gz\` (ARM64 - recommended)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Rockchip CPU Support" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Perfect for popular development boards:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **RK3588/RK3588S**: \`adsb-linux-arm64.tar.gz\` (Orange Pi 5, Rock Pi 5, etc.)" >> release_notes.md
+          echo "- **RK3566/RK3568**: \`adsb-linux-arm64.tar.gz\` (Orange Pi 3B, Rock Pi 3A, etc.)" >> release_notes.md
+          echo "- **RK3399**: \`adsb-linux-arm64.tar.gz\` (Rock Pi 4, Orange Pi 4, etc.)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Additional Platforms" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "**Mainstream Linux**:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- \`adsb-linux-386.tar.gz\` - 32-bit x86 systems" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "**Experimental (Community Builds)**:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- \`adsb-linux-riscv64.tar.gz\` - RISC-V 64-bit" >> release_notes.md
+          echo "- \`adsb-linux-loongarch.tar.gz\` - LoongArch 64-bit" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Security & Verification" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "All binaries include SHA256 checksums for integrity verification:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "# Verify download integrity" >> release_notes.md
+          echo "sha256sum -c adsb-linux-amd64.tar.gz.sha256" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+          echo "" >> release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+          generate_release_notes: true
+          body_path: release_notes.md
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Summary
+        run: |
+          echo "## Release Complete! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Assets:** $(ls release/adsb-* | grep -v sha256 | wc -l) binaries" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Download Links" >> $GITHUB_STEP_SUMMARY
+          echo "Visit the [releases page](https://github.com/${{ github.repository }}/releases/latest) to download." >> $GITHUB_STEP_SUMMARY
+
+# ==============================================================================
+# Usage:
+#
+# 1. Create a git tag and push:
+#    git tag v1.0.0
+#    git push origin v1.0.0
+#
+# 2. Manual trigger from GitHub Actions tab
+#
+# 3. The workflow will:
+#    - Run tests and quality checks
+#    - Build for all supported platforms using justfile
+#    - Create a GitHub release with binaries and checksums
+#
+# ==============================================================================

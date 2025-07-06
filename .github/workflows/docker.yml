@@ -1,0 +1,275 @@
+name: Docker Multi-Architecture Build
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-binaries:
+    name: Build Cross-Platform Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: "0.15.1"
+
+      - name: Install cargo-zigbuild
+        run: |
+          cargo install cargo-zigbuild
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Add musl targets
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          rustup target add aarch64-unknown-linux-musl
+          rustup target add armv7-unknown-linux-musleabihf
+          rustup target add arm-unknown-linux-musleabihf
+          rustup target add i686-unknown-linux-musl
+          rustup target add riscv64gc-unknown-linux-musl
+
+      - name: Build all musl platforms
+        run: |
+          VERSION="${{ github.ref_name }}"
+          BINDIR="target/release"
+
+          echo "Building x86_64 musl..."
+          cargo zigbuild --target x86_64-unknown-linux-musl --release
+          cp target/x86_64-unknown-linux-musl/release/adsb ${BINDIR}/adsb-${VERSION}-linux-amd64
+
+          echo "Building aarch64 musl..."
+          cargo zigbuild --target aarch64-unknown-linux-musl --release
+          cp target/aarch64-unknown-linux-musl/release/adsb ${BINDIR}/adsb-${VERSION}-linux-arm64
+
+          echo "Building armv7 musl..."
+          cargo zigbuild --target armv7-unknown-linux-musleabihf --release
+          cp target/armv7-unknown-linux-musleabihf/release/adsb ${BINDIR}/adsb-${VERSION}-linux-armv7
+
+          echo "Building armv6 musl..."
+          cargo zigbuild --target arm-unknown-linux-musleabihf --release
+          cp target/arm-unknown-linux-musleabihf/release/adsb ${BINDIR}/adsb-${VERSION}-linux-armv6
+
+          echo "Building i686 musl..."
+          cargo zigbuild --target i686-unknown-linux-musl --release
+          cp target/i686-unknown-linux-musl/release/adsb ${BINDIR}/adsb-${VERSION}-linux-386
+
+          echo "Building riscv64 musl..."
+          cargo zigbuild --target riscv64gc-unknown-linux-musl --release
+          cp target/riscv64gc-unknown-linux-musl/release/adsb ${BINDIR}/adsb-${VERSION}-linux-riscv64
+
+          echo "Build complete! Generated binaries:"
+          ls -la ${BINDIR}/adsb-${VERSION}-*
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-compiled-binaries
+          path: target/release/adsb-*
+          retention-days: 1
+
+  docker:
+    name: Build and Push Docker Images
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Download binaries
+        uses: actions/download-artifact@v5
+        with:
+          name: cross-compiled-binaries
+          path: ./
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{raw}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create .dockerignore
+        run: |
+          cat > .dockerignore << 'EOF'
+          # Build artifacts and cache (keep source for compilation)
+          target/debug/
+          target/*/debug/
+          target/*/incremental/
+          target/.rustc_info.json
+
+          # Documentation
+          target/doc/
+          docs/
+          *.md
+          !README.md
+
+          # Git and IDE
+          .git/
+          .gitignore
+          .claude/
+          .vscode/
+          .idea/
+
+          # Development tools (keep Cargo.toml and Cargo.lock needed for build)
+          justfile
+          .cargo/
+
+          # Temporary and cache files
+          *.tmp
+          *.log
+          .DS_Store
+          Thumbs.db
+
+          # CI/CD
+          .github/
+          EOF
+
+      - name: Create Dockerfile
+        run: |
+          cat > Dockerfile << 'EOF'
+          # Alpine runtime
+          FROM alpine:3.22
+          ARG TARGETARCH
+          ARG TARGETOS
+          ARG TARGETVARIANT
+          ARG VERSION
+
+          # Install runtime dependencies
+          RUN apk add --no-cache \
+              ca-certificates \
+              tzdata \
+              wget
+
+          # Create non-root user
+          RUN addgroup -g 1000 adsb && \
+              adduser -D -s /bin/sh -u 1000 -G adsb adsb
+
+          # Copy the pre-compiled binary based on target architecture
+          COPY adsb-* /tmp/
+
+          RUN if [ "${TARGETARCH}" = "amd64" ]; then \
+                  cp /tmp/adsb-${VERSION}-linux-amd64 /usr/local/bin/adsb; \
+              elif [ "${TARGETARCH}" = "arm64" ]; then \
+                  cp /tmp/adsb-${VERSION}-linux-arm64 /usr/local/bin/adsb; \
+              elif [ "${TARGETARCH}" = "arm" ] && [ "${TARGETVARIANT}" = "v6" ]; then \
+                  cp /tmp/adsb-${VERSION}-linux-armv6 /usr/local/bin/adsb; \
+              elif [ "${TARGETARCH}" = "arm" ] && [ "${TARGETVARIANT}" = "v7" ]; then \
+                  cp /tmp/adsb-${VERSION}-linux-armv7 /usr/local/bin/adsb; \
+              elif [ "${TARGETARCH}" = "386" ]; then \
+                  cp /tmp/adsb-${VERSION}-linux-386 /usr/local/bin/adsb; \
+              elif [ "${TARGETARCH}" = "riscv64" ]; then \
+                  cp /tmp/adsb-${VERSION}-linux-riscv64 /usr/local/bin/adsb; \
+              else \
+                  echo "Unsupported architecture: ${TARGETARCH}"; exit 1; \
+              fi && \
+          chmod +x /usr/local/bin/adsb && \
+          rm -rf /tmp/adsb-*
+
+          # Set default timezone (can be overridden at runtime)
+          ENV TZ=UTC
+
+          # Switch to non-root user
+          USER adsb
+
+          # Set working directory
+          WORKDIR /app
+
+          # Expose default port (adjust as needed)
+          EXPOSE 8080
+
+          # Health check
+          HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+              CMD wget -q --spider http://localhost:8080/api/stats || exit 1
+
+          # Default command
+          ENTRYPOINT ["/usr/local/bin/adsb"]
+          CMD ["--help"]
+          EOF
+
+      - name: Build and push Docker images (all architectures)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386,linux/riscv64
+          build-args: |
+            VERSION=${{ github.ref_name }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Delete old untagged images
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: "container"
+          min-versions-to-keep: 12
+          delete-only-untagged-versions: true
+        continue-on-error: true
+
+  test-images:
+    name: Test Docker Images
+    needs: docker
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+          - linux/arm/v7
+          - linux/arm/v6
+          - linux/386
+          - linux/riscv64
+
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Test image
+        run: |
+          docker run --rm --platform ${{ matrix.platform }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} \
+            --help
