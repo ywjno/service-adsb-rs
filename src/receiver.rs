@@ -12,11 +12,13 @@ use reqwest::Client;
 use tokio::net::TcpStream;
 use tokio::time::sleep;
 
-use super::{dashboard, toml::Config};
+use super::dashboard;
+use super::toml::Config;
 
 // Global HTTP client to avoid repeated creation
 lazy_static::lazy_static! {
     static ref HTTP_CLIENT: Client = reqwest::Client::builder()
+        .tls_backend_rustls()
         .timeout(Duration::from_secs(30))
         .pool_max_idle_per_host(10)
         .build()

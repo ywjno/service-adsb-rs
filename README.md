@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Rust](https://img.shields.io/badge/rust-1.85.0+-brightgreen.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.93.0+-brightgreen.svg)](https://www.rust-lang.org)
 
 A high-performance ADS-B (Automatic Dependent Surveillance-Broadcast) data processing service written in Rust. This service receives aircraft data via the SBS1 protocol, processes it, and uploads to remote services while providing a real-time web dashboard for monitoring.
 
@@ -238,7 +238,7 @@ Serves the web dashboard HTML interface.
 
 ### Prerequisites
 
-- **Rust**: Minimum version 1.85.0
+- **Rust**: Minimum version 1.93.0
 - **Git**: For cloning the repository
 
 ### Build Steps

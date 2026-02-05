@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use clap::error::ErrorKind;
-use clap::{CommandFactory, Parser, arg, crate_description};
+use clap::{CommandFactory, Parser, crate_description};
 use url::Url;
 
 use super::toml::{Config, Receiver, Service};
