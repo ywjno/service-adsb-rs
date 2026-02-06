@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.93.0
@@ -67,6 +67,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     needs: test
 
+    permissions:
+      contents: read
+
     strategy:
       fail-fast: false
       matrix:
@@ -84,7 +87,7 @@ jobs:
 
           - target: universal2-apple-darwin
             runner: macos-latest # Native compilation
-            just_target: universal2-apple-darwin
+            just_target: darwin-universal2
             asset_name: adsb-darwin-universal2
 
           - target: x86_64-pc-windows-gnu
@@ -121,22 +124,24 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@1.93.0
+
+      - name: Build tools
+        uses: jdx/mise-action@v3
         with:
-          targets: ${{ matrix.target == 'universal2-apple-darwin' && 'x86_64-apple-darwin,aarch64-apple-darwin' || matrix.target }}
+          mise_toml: |
+            [tools]
+            "github:rust-cross/cargo-zigbuild" = "latest"
+            just = "latest"
+            zig = "latest"
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
           key: build-${{ matrix.target }}-${{ runner.os }}
-
-      - name: Install Zig (for cross-compilation)
-        uses: mlugg/setup-zig@v2
-        with:
-          version: "0.15.1"
 
       - name: Install build dependencies
         run: |
@@ -147,7 +152,6 @@ jobs:
             echo "MinGW toolchain installed"
           fi
 
-          cargo install just cargo-zigbuild
           echo "Build environment ready"
 
       - name: Build using justfile
@@ -159,29 +163,21 @@ jobs:
 
       - name: Verify and prepare binary
         run: |
-          echo "Verifying build output..."
-          just verify-build ${{ matrix.just_target }}
-
-          # Use justfile's output path directly
           if [[ "${{ matrix.target }}" == *"windows"* ]]; then
-            binary_path="target/release/adsb-${{ github.ref_name }}-${{ matrix.just_target }}.exe"
+            binary_path="dist/adsb-${{ github.ref_name }}-${{ matrix.just_target }}.exe"
           else
-            binary_path="target/release/adsb-${{ github.ref_name }}-${{ matrix.just_target }}"
+            binary_path="dist/adsb-${{ github.ref_name }}-${{ matrix.just_target }}"
           fi
 
-          # Verify binary exists and copy to artifact name
-          if [[ -f "$binary_path" ]]; then
-            cp "$binary_path" "${{ matrix.asset_name }}"
-            echo "Binary prepared: ${{ matrix.asset_name }}"
-            ls -la "${{ matrix.asset_name }}"
-          else
-            echo "Error: Binary not found at expected path: $binary_path"
-            echo "Available files in target/release:"
-            ls -la target/release/ || echo "target/release directory not found"
-            echo "Available files in target:"
-            find target -name "*adsb*" -type f 2>/dev/null || echo "No adsb files found"
+          if [[ ! -f "$binary_path" ]]; then
+            echo "Error: binary not found at $binary_path"
+            echo "Contents of dist/:"
+            ls -la dist/ 2>/dev/null || echo "dist/ not found"
             exit 1
           fi
+
+          cp "$binary_path" "${{ matrix.asset_name }}"
+          ls -la "${{ matrix.asset_name }}"
 
       - name: Create compressed archive
         run: |
@@ -220,7 +216,7 @@ jobs:
           cat "$ARCHIVE_NAME.sha256"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset_name }}
           path: |
@@ -243,12 +239,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Fetch full history for changelog generation
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts/
 
@@ -301,7 +297,7 @@ jobs:
           echo "" >> release_notes.md
           echo "- \`adsb-linux-386.tar.gz\` - 32-bit x86 systems" >> release_notes.md
           echo "" >> release_notes.md
-          echo "**Experimental (Community Builds)**:" >> release_notes.md
+          echo "**Experimental Platforms**:" >> release_notes.md
           echo "" >> release_notes.md
           echo "- \`adsb-linux-riscv64.tar.gz\` - RISC-V 64-bit" >> release_notes.md
           echo "- \`adsb-linux-loongarch.tar.gz\` - LoongArch 64-bit" >> release_notes.md
