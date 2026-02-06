@@ -1,349 +1,336 @@
-# Project configuration
-name := "adsb"
-version := env_var_or_default("VERSION", "v0.2.0")
-bindir := "target/release"
+# =============================================================================
+# service-adsb-rs - cross-platform build
+# =============================================================================
+#
+#   just dev               debug build (current platform)
+#   just build-tier1       Tier 1 targets
+#   just -j build-tier1    Tier 1 targets in parallel (just 1.6+)
+#   just release           Tier 1 release: build -> gzip -> sha256
+#   just list              all available targets
+#
+# Output: ./dist/  (survives `cargo clean`)
+# =============================================================================
 
-# Platform target mappings
-# Tier 1: Primary support - tested and recommended
-# Tier 2: Secondary support - tested but may have limitations
-# Experimental: Cutting-edge platforms - use at your own risk
+name    := "adsb"
+version := env_var_or_default("VERSION", "v0.3.0")
+outdir  := "dist"
 
-# Default recipe: build most commonly used platforms
-default:
-    @echo "Building all Linux platforms..."
-    @just build-all-linux
+# ---------------------------------------------------------------------------
+# default
+# ---------------------------------------------------------------------------
 
-# Build all supported platforms
-all-arch: check-deps
-    @echo "Building all supported platforms..."
-    @just build-all-linux build-all-darwin build-all-windows
+default: list
 
-# Platform-specific build groups
-build-all-linux: check-deps
-    @echo "Building all Linux platforms..."
-    @just build-linux-386 build-linux-amd64 build-linux-armv6 build-linux-armv7 build-linux-arm64 build-linux-riscv64 build-linux-loongarch
+# ---------------------------------------------------------------------------
+# Tier 1 - primary support
+# ---------------------------------------------------------------------------
 
-build-all-darwin: check-deps
-    @echo "Building all macOS platforms..."
-    @just build-universal2-apple-darwin
+build-tier1: build-linux-amd64 build-linux-arm64 build-darwin-universal2 build-windows-amd64
 
-build-all-windows: check-deps
-    @echo "Building all Windows platforms..."
-    @just build-windows-386 build-windows-amd64
+# Tier 1 minus macOS (for Linux, where macOS cross-compile is unavailable)
+build-tier1-no-darwin: build-linux-amd64 build-linux-arm64 build-windows-amd64
 
-build-all-arm: check-deps
-    @echo "Building all ARM platforms..."
-    @just build-linux-armv6 build-linux-armv7 build-linux-arm64
+build-linux-amd64: check-deps
+    @just _build x86_64-unknown-linux-gnu linux-amd64
 
-# Parallel build recipes for faster compilation
-build-all-linux-parallel: check-deps
-    @echo "Building all Linux platforms in parallel..."
-    @echo "build-linux-386 build-linux-amd64 build-linux-armv6 build-linux-armv7 build-linux-arm64 build-linux-riscv64 build-linux-loongarch" | tr ' ' '\n' | xargs -n1 -P4 just
+build-linux-arm64: check-deps
+    @just _build aarch64-unknown-linux-gnu linux-arm64
 
-build-tier1-parallel: check-deps
-    @echo "Building Tier 1 platforms in parallel..."
-    @echo "build-linux-386 build-linux-amd64 build-linux-arm64 build-universal2-apple-darwin build-windows-amd64" | tr ' ' '\n' | xargs -n1 -P3 just
+build-darwin-universal2: check-deps
+    @just _build-universal2
 
-# Individual platform builds - macOS/Darwin
-build-universal2-apple-darwin:
-    @echo "Building macOS Universal2 binary (Intel + Apple Silicon)..."
-    @echo "  Using native macOS toolchain with lipo..."
-    @rustup target add x86_64-apple-darwin aarch64-apple-darwin
-    @echo "  Building Intel binary..."
-    @cargo build --target x86_64-apple-darwin --release || (echo "Build failed for x86_64-apple-darwin" && exit 1)
-    @echo "  Building Apple Silicon binary..."
-    @cargo build --target aarch64-apple-darwin --release || (echo "Build failed for aarch64-apple-darwin" && exit 1)
-    @echo "  Creating Universal2 binary with lipo..."
-    @mkdir -p {{bindir}}
-    @mkdir -p target/universal2-apple-darwin/release
-    @lipo -create \
-        target/x86_64-apple-darwin/release/{{name}} \
-        target/aarch64-apple-darwin/release/{{name}} \
-        -output target/universal2-apple-darwin/release/{{name}}
-    @cp target/universal2-apple-darwin/release/{{name}} {{bindir}}/{{name}}-{{version}}-universal2-apple-darwin
-    @echo "  macOS Universal2 build complete"
-    @just verify-build universal2-apple-darwin
+build-windows-amd64: check-deps
+    @just _build x86_64-pc-windows-gnu windows-amd64
 
-# Individual platform builds - Linux
-build-linux-386:
-    @echo "Building Linux i686..."
-    @echo "  Target: i686-unknown-linux-gnu"
-    @rustup target add i686-unknown-linux-gnu
-    @cargo zigbuild --target i686-unknown-linux-gnu --release || (echo "Build failed for linux-386" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/i686-unknown-linux-gnu/release/{{name}} {{bindir}}/{{name}}-{{version}}-linux-386
-    @echo "  Linux i686 build complete"
-    @just verify-build linux-386
+# ---------------------------------------------------------------------------
+# Tier 2 - secondary support
+# ---------------------------------------------------------------------------
 
-build-linux-amd64:
-    @echo "Building Linux x86_64..."
-    @echo "  Target: x86_64-unknown-linux-gnu"
-    @rustup target add x86_64-unknown-linux-gnu
-    @cargo zigbuild --target x86_64-unknown-linux-gnu --release || (echo "Build failed for linux-amd64" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/x86_64-unknown-linux-gnu/release/{{name}} {{bindir}}/{{name}}-{{version}}-linux-amd64
-    @echo "  Linux x86_64 build complete"
-    @just verify-build linux-amd64
+build-tier2: build-linux-386 build-linux-armv6 build-linux-armv7 build-linux-riscv64 build-linux-loongarch build-windows-386
 
-build-linux-armv6:
-    @echo "Building Linux ARMv6 (Raspberry Pi Zero)..."
-    @echo "  Target: arm-unknown-linux-gnueabihf"
-    @rustup target add arm-unknown-linux-gnueabihf
-    @cargo zigbuild --target arm-unknown-linux-gnueabihf --release || (echo "Build failed for linux-armv6" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/arm-unknown-linux-gnueabihf/release/{{name}} {{bindir}}/{{name}}-{{version}}-linux-armv6
-    @echo "  Linux ARMv6 build complete"
-    @just verify-build linux-armv6
+build-linux-386: check-deps
+    @just _build i686-unknown-linux-gnu linux-386
 
-build-linux-armv7:
-    @echo "Building Linux ARMv7 (Raspberry Pi 2/3)..."
-    @echo "  Target: armv7-unknown-linux-gnueabihf"
-    @rustup target add armv7-unknown-linux-gnueabihf
-    @cargo zigbuild --target armv7-unknown-linux-gnueabihf --release || (echo "Build failed for linux-armv7" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/armv7-unknown-linux-gnueabihf/release/{{name}} {{bindir}}/{{name}}-{{version}}-linux-armv7
-    @echo "  Linux ARMv7 build complete"
-    @just verify-build linux-armv7
+build-linux-armv6: check-deps
+    @just _build arm-unknown-linux-gnueabihf linux-armv6
 
-build-linux-arm64:
-    @echo "Building Linux ARM64 (Raspberry Pi 4+, RK3588/RK3588S, RK3566/RK3568, RK3399)..."
-    @echo "  Target: aarch64-unknown-linux-gnu"
-    @rustup target add aarch64-unknown-linux-gnu
-    @cargo zigbuild --target aarch64-unknown-linux-gnu --release || (echo "Build failed for linux-arm64" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/aarch64-unknown-linux-gnu/release/{{name}} {{bindir}}/{{name}}-{{version}}-linux-arm64
-    @echo "  Linux ARM64 build complete"
-    @just verify-build linux-arm64
+build-linux-armv7: check-deps
+    @just _build armv7-unknown-linux-gnueabihf linux-armv7
 
-build-linux-riscv64:
-    @echo "Building Linux RISC-V 64-bit..."
-    @echo "  Target: riscv64gc-unknown-linux-gnu"
-    @rustup target add riscv64gc-unknown-linux-gnu
-    @cargo zigbuild --target riscv64gc-unknown-linux-gnu --release || (echo "Build failed for linux-riscv64" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/riscv64gc-unknown-linux-gnu/release/{{name}} {{bindir}}/{{name}}-{{version}}-linux-riscv64
-    @echo "  Linux RISC-V 64-bit build complete"
-    @just verify-build linux-riscv64
+build-linux-riscv64: check-deps
+    @just _build riscv64gc-unknown-linux-gnu linux-riscv64
 
-build-linux-loongarch:
-    @echo "Building Linux LoongArch 64-bit..."
-    @echo "  Target: loongarch64-unknown-linux-gnu"
-    @rustup target add loongarch64-unknown-linux-gnu
-    @cargo zigbuild --target loongarch64-unknown-linux-gnu --release || (echo "Build failed for linux-loongarch" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/loongarch64-unknown-linux-gnu/release/{{name}} {{bindir}}/{{name}}-{{version}}-linux-loongarch
-    @echo "  Linux LoongArch 64-bit build complete"
-    @just verify-build linux-loongarch
+build-linux-loongarch: check-deps
+    @just _build loongarch64-unknown-linux-gnu linux-loongarch
 
+build-windows-386: check-deps
+    @just _build i686-pc-windows-gnu windows-386
 
-# Individual platform builds - Windows
-build-windows-386:
-    @echo "Building Windows i686..."
-    @echo "  Target: i686-pc-windows-gnu"
-    @rustup target add i686-pc-windows-gnu
-    @export CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER="i686-w64-mingw32-gcc"
-    @cargo zigbuild --target i686-pc-windows-gnu --release || (echo "Build failed for windows-386" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/i686-pc-windows-gnu/release/{{name}}.exe {{bindir}}/{{name}}-{{version}}-windows-386.exe
-    @echo "  Windows i686 build complete"
-    @just verify-build windows-386
+# ---------------------------------------------------------------------------
+# musl - static binaries for Docker
+# ---------------------------------------------------------------------------
 
-build-windows-amd64:
-    @echo "Building Windows x86_64..."
-    @echo "  Target: x86_64-pc-windows-gnu"
-    @rustup target add x86_64-pc-windows-gnu
-    @cargo build --target x86_64-pc-windows-gnu --release || (echo "Build failed for windows-amd64" && exit 1)
-    @mkdir -p {{bindir}}
-    @cp target/x86_64-pc-windows-gnu/release/{{name}}.exe {{bindir}}/{{name}}-{{version}}-windows-amd64.exe
-    @echo "  Windows x86_64 build complete"
-    @just verify-build windows-amd64
+build-docker: build-linux-amd64-musl build-linux-arm64-musl build-linux-armv6-musl build-linux-armv7-musl build-linux-386-musl build-linux-riscv64-musl
 
-# Utility recipes
-check-deps:
-    @echo "Checking build dependencies..."
-    @command -v cargo >/dev/null || (echo "cargo not found - install Rust first" && exit 1)
-    @command -v just >/dev/null || (echo "just not found - run 'cargo install just'" && exit 1)
-    @cargo-zigbuild --version >/dev/null 2>&1 || (echo "cargo-zigbuild not found - run 'cargo install cargo-zigbuild'" && exit 1)
-    @echo "All dependencies satisfied"
+build-linux-amd64-musl: check-deps
+    @just _build x86_64-unknown-linux-musl linux-amd64-musl
 
-verify-build target:
-    #!/bin/bash
-    set -eu
-    echo "Verifying {{target}} build..."
+build-linux-arm64-musl: check-deps
+    @just _build aarch64-unknown-linux-musl linux-arm64-musl
 
-    # Determine file extension
-    if echo "{{target}}" | grep -q "windows"; then
-        ext=".exe"
-    else
-        ext=""
-    fi
+build-linux-armv6-musl: check-deps
+    @just _build arm-unknown-linux-musleabihf linux-armv6-musl
 
-    filepath="{{bindir}}/{{name}}-{{version}}-{{target}}${ext}"
+build-linux-armv7-musl: check-deps
+    @just _build armv7-unknown-linux-musleabihf linux-armv7-musl
 
-    if [ -f "${filepath}" ]; then
-        echo "  Binary exists: ${filepath}"
-        size=$(stat -f%z "${filepath}" 2>/dev/null || stat -c%s "${filepath}" 2>/dev/null || echo "unknown")
-        echo "  Size: ${size} bytes"
-        if command -v file >/dev/null; then
-            echo "  Type: $(file "${filepath}")"
-        fi
-    else
-        echo "  Binary missing: ${filepath}"
-        exit 1
-    fi
+build-linux-386-musl: check-deps
+    @just _build i686-unknown-linux-musl linux-386-musl
 
-# Development and testing recipes
-dev-build:
-    @echo "Building for development (current platform)..."
+build-linux-riscv64-musl: check-deps
+    @just _build riscv64gc-unknown-linux-musl linux-riscv64-musl
+
+# ---------------------------------------------------------------------------
+# Combo
+# ---------------------------------------------------------------------------
+
+build-all: build-tier1 build-tier2
+build-arm: build-linux-armv6 build-linux-armv7 build-linux-arm64
+
+# ---------------------------------------------------------------------------
+# Release
+# ---------------------------------------------------------------------------
+
+release: build-tier1
+    @just _compress
+    @just _checksum
+    @echo ""
+    @echo "  release {{version}} -> {{outdir}}/"
+    @ls -lh {{outdir}}/
+
+release-all: build-all
+    @just _compress
+    @just _checksum
+    @echo ""
+    @echo "  release {{version}} (all) -> {{outdir}}/"
+    @ls -lh {{outdir}}/
+
+# ---------------------------------------------------------------------------
+# Development
+# ---------------------------------------------------------------------------
+
+dev:
     @cargo build
-    @echo "Development build complete"
+    @echo "-> target/debug/{{name}}"
 
-dev-run *ARGS:
-    @echo "Running development build..."
+run *ARGS:
     @cargo run -- {{ARGS}}
 
 test:
-    @echo "Running tests..."
-    @cargo test
-    @echo "All tests passed"
+    @cargo test --all-features
 
 fmt:
-    @echo "Formatting code..."
-    @cargo fmt
-    @echo "Code formatted"
+    @cargo fmt --all
 
-clippy:
-    @echo "Running clippy lints..."
-    @cargo clippy -- -D warnings
-    @echo "No clippy warnings"
+lint:
+    @cargo clippy --all-targets --all-features -- -D warnings
 
-check: fmt clippy test
-    @echo "All checks passed"
+doc:
+    @cargo doc --no-deps --all-features
 
-# Cleaning recipes
+check: fmt lint test doc
+
+# ---------------------------------------------------------------------------
+# Verification
+# ---------------------------------------------------------------------------
+
+verify-tier1:
+    @just _verify linux-amd64 linux-arm64 darwin-universal2 windows-amd64
+
+verify-tier2:
+    @just _verify linux-386 linux-armv6 linux-armv7 linux-riscv64 linux-loongarch windows-386
+
+verify-all: verify-tier1 verify-tier2
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
+
 clean:
-    @echo "Cleaning build artifacts..."
     @cargo clean
-    @rm -rf {{bindir}}
-    @echo "Clean complete"
+    @rm -rf {{outdir}}
 
-clean-target target:
-    @echo "Cleaning {{target}} artifacts..."
-    @rm -f {{bindir}}/{{name}}-*-{{target}}*
-    @echo "{{target}} artifacts cleaned"
+clean-dist:
+    @rm -rf {{outdir}}
 
-clean-releases:
-    @echo "Cleaning release artifacts (keeping source builds)..."
-    @find {{bindir}} -name "*.gz" -delete 2>/dev/null || true
-    @find {{bindir}} -name "*.sha256" -delete 2>/dev/null || true
-    @echo "Release artifacts cleaned"
+# ---------------------------------------------------------------------------
+# Info
+# ---------------------------------------------------------------------------
 
-# Release management
-release: checksum
+list:
     @echo ""
-    @echo "Release {{version}} created successfully!"
-    @echo "Location: {{bindir}}/"
+    @echo " {{name}} {{version}}"
     @echo ""
-    @echo "Release Summary:"
-    @ls -la {{bindir}}/ | grep -E "({{name}}-{{version}}|\.gz$|\.sha256$)" || true
+    @echo " Tier 1 (primary)"
+    @echo "   build-linux-amd64          x86_64 Linux"
+    @echo "   build-linux-arm64          ARM64 Linux (RPi 4+, etc.)"
+    @echo "   build-darwin-universal2    macOS Intel + Apple Silicon"
+    @echo "   build-windows-amd64        x86_64 Windows"
+    @echo ""
+    @echo " Tier 2 (secondary)"
+    @echo "   build-linux-386            i686 Linux"
+    @echo "   build-linux-armv6          ARMv6 Linux (RPi Zero/1)"
+    @echo "   build-linux-armv7          ARMv7 Linux (RPi 2/3)"
+    @echo "   build-linux-riscv64        RISC-V 64 Linux"
+    @echo "   build-linux-loongarch      LoongArch 64 Linux"
+    @echo "   build-windows-386          i686 Windows"
+    @echo ""
+    @echo " musl / Docker"
+    @echo "   build-linux-<arch>-musl    static musl variants"
+    @echo "   build-docker               all musl targets"
+    @echo ""
+    @echo " Groups"
+    @echo "   build-tier1                Tier 1"
+    @echo "   build-tier1-no-darwin      Tier 1 without macOS (in Linux)"
+    @echo "   build-tier2                Tier 2"
+    @echo "   build-all                  Tier 1 + Tier 2"
+    @echo "   build-arm                  ARMv6 + ARMv7 + ARM64"
+    @echo ""
+    @echo " Release"
+    @echo "   release                    Tier 1 -> gzip -> sha256"
+    @echo "   release-all                Tier 1+2 -> gzip -> sha256"
+    @echo ""
+    @echo " Dev"
+    @echo "   dev                        debug build"
+    @echo "   run [ARGS]                 debug run"
+    @echo "   test / check               test / fmt + lint + test + doc"
+    @echo ""
+    @echo " Verify"
+    @echo "   verify-tier1 / verify-tier2 / verify-all"
+    @echo ""
+    @echo " Tips"
+    @echo "   just -j build-tier1              parallel build"
+    @echo "   VERSION=v1.0.0 just release      tagged release"
     @echo ""
 
-compress: all-arch
-    @echo "Compressing release binaries..."
+# =============================================================================
+# Internals
+# =============================================================================
+
+check-deps:
+    @command -v cargo          >/dev/null 2>&1 || { echo "[!!] cargo not found"; exit 1; }
+    @command -v cargo-zigbuild >/dev/null 2>&1 || { echo "[!!] cargo-zigbuild missing - cargo install cargo-zigbuild"; exit 1; }
+    @command -v zig            >/dev/null 2>&1 || { echo "[!!] zig missing - https://ziglang.org/download/"; exit 1; }
+
+# Cross-compile and copy to dist/
+_build rust_target output_name:
     #!/bin/bash
-    set -eu
-    cd {{bindir}}
-    for file in $(find . -name "{{name}}-{{version}}-*" -not -name "*.gz" -not -name "*.sha256" -type f); do
-    if [ ! -f "${file}.gz" ]; then
-    echo "  ${file#./} → ${file#./}.gz"
-    gzip -c "${file#./}" > "${file#./}.gz"
-    fi
-    done
-    echo "Compression complete"
+    set -euo pipefail
 
-checksum: compress
-    @echo "Generating SHA256 checksums..."
-    #!/bin/bash
-    set -eu
-    cd {{bindir}}
-    for file in $(find . -name "{{name}}-{{version}}-*" -type f -not -name "*.sha256"); do
-    if [ ! -f "${file}.sha256" ]; then
-    echo "  ${file#./} → ${file#./}.sha256"
-    if command -v shasum >/dev/null; then
-    shasum -a 256 "${file#./}" > "${file#./}.sha256"
-    elif command -v sha256sum >/dev/null; then
-    sha256sum "${file#./}" > "${file#./}.sha256"
+    rustup target add "{{rust_target}}" 2>/dev/null || true
+    cargo zigbuild --target "{{rust_target}}" --release
+
+    mkdir -p "{{outdir}}"
+
+    if [[ "{{rust_target}}" == *windows* ]]; then
+        src="target/{{rust_target}}/release/{{name}}.exe"
+        dst="{{outdir}}/{{name}}-{{version}}-{{output_name}}.exe"
     else
-    echo "No SHA256 utility found"
-    exit 1
+        src="target/{{rust_target}}/release/{{name}}"
+        dst="{{outdir}}/{{name}}-{{version}}-{{output_name}}"
     fi
+
+    cp "$src" "$dst"
+    size=$(stat -f%z "$dst" 2>/dev/null || stat -c%s "$dst")
+    echo "  [ok] $(basename "$dst") ($size bytes)"
+
+# macOS Universal2: build both slices, combine with lipo.
+_build-universal2:
+    #!/bin/bash
+    set -euo pipefail
+
+    # Requires macOS SDK: either run natively on macOS, or set SDKROOT
+    # to a downloaded SDK (bypasses xcrun).  CI uses macos-latest runner.
+    if [[ "$(uname -s)" != "Darwin" ]] && [ -z "${SDKROOT:-}" ]; then
+        echo "[!!] darwin-universal2 needs macOS or SDKROOT"
+        echo "  option 1: run on macOS"
+        echo "  option 2: set SDKROOT to a macOS SDK path"
+        echo "  CI: release.yml already uses macos-latest for this target"
+        echo "  local Linux: use 'just build-tier1-no-darwin' to skip macOS"
+        exit 1
     fi
+
+    rustup target add x86_64-apple-darwin aarch64-apple-darwin 2>/dev/null || true
+
+    cargo zigbuild --target x86_64-apple-darwin  --release
+    cargo zigbuild --target aarch64-apple-darwin --release
+
+    mkdir -p "{{outdir}}"
+    dst="{{outdir}}/{{name}}-{{version}}-darwin-universal2"
+
+    lipo -create \
+        target/x86_64-apple-darwin/release/{{name}} \
+        target/aarch64-apple-darwin/release/{{name}} \
+        -output "$dst"
+
+    size=$(stat -f%z "$dst" 2>/dev/null || stat -c%s "$dst")
+    echo "  [ok] $(basename "$dst") ($size bytes)"
+
+# gzip all release binaries (keeps originals)
+_compress:
+    #!/bin/bash
+    set -euo pipefail
+    shopt -s nullglob
+
+    for f in {{outdir}}/{{name}}-{{version}}-*; do
+        [[ "$f" == *.gz     ]] && continue
+        [[ "$f" == *.sha256 ]] && continue
+        gzip -kf "$f"
+        echo "  [+] $(basename "${f}.gz")"
     done
-    echo "Checksums generated"
+    echo "  [ok] compressed"
 
-# Information and help
-list-targets:
-    @echo "Available build targets:"
-    @echo ""
-    @echo "Tier 1 (Primary Support):"
-    @echo "  linux-amd64             - Linux x86_64"
-    @echo "  linux-arm64             - Linux ARM64"
-    @echo "  universal2-apple-darwin - macOS Universal2 (Intel + Apple Silicon)"
-    @echo "  windows-amd64           - Windows x86_64"
-    @echo ""
-    @echo "Tier 2 (Secondary Support):"
-    @echo "  linux-386               - Linux i686"
-    @echo "  linux-armv6/armv7       - ARM variants"
-    @echo "  linux-riscv64           - RISC-V 64-bit"
-    @echo "  linux-loongarch         - LoongArch 64-bit"
-    @echo "  windows-386             - Windows i686"
-    @echo "  windows-arm64           - Windows ARM64"
-    @echo ""
+# Single sha256 manifest for all release files
+_checksum:
+    #!/bin/bash
+    set -euo pipefail
+    shopt -s nullglob
 
-help:
-    @echo "{{name}} Build System"
-    @echo ""
-    @echo "Build Commands:"
-    @echo "  just                     - Build all Linux platforms (recommended)"
-    @echo "  just all-arch            - Build all supported platforms"
-    @echo "  just build-all-linux     - Build all Linux platforms"
-    @echo "  just build-all-darwin    - Build all macOS platforms"
-    @echo "  just build-all-windows   - Build all Windows platforms"
-    @echo "  just build-all-arm       - Build all ARM platforms"
-    @echo ""
-    @echo "Parallel Build Commands:"
-    @echo "  just build-tier1-parallel     - Build Tier 1 platforms in parallel"
-    @echo "  just build-all-linux-parallel - Build Linux platforms in parallel"
-    @echo ""
-    @echo "Individual Targets:"
-    @echo "  just build-<platform>    - Build specific platform"
-    @echo "  just list-targets        - Show all available platforms"
-    @echo ""
-    @echo "Development Commands:"
-    @echo "  just dev-build           - Build for development"
-    @echo "  just dev-run [ARGS]      - Run development build"
-    @echo "  just test                - Run tests"
-    @echo "  just check               - Run fmt + clippy + test"
-    @echo ""
-    @echo "Release Commands:"
-    @echo "  just release             - Create full release (build + compress + checksum)"
-    @echo "  just compress            - Compress binaries with gzip"
-    @echo "  just checksum            - Generate SHA256 checksums"
-    @echo ""
-    @echo "Cleanup Commands:"
-    @echo "  just clean               - Clean all build artifacts"
-    @echo "  just clean-target TARGET - Clean specific target artifacts"
-    @echo "  just clean-releases      - Clean compressed files and checksums"
-    @echo ""
-    @echo "Utility Commands:"
-    @echo "  just check-deps          - Check build dependencies"
-    @echo "  just verify-build TARGET - Verify specific build"
-    @echo "  just help                - Show this help message"
-    @echo ""
-    @echo "Examples:"
-    @echo "  just build-linux-amd64              # Build Linux x64"
-    @echo "  just build-tier1-parallel           # Fast build of main platforms"
-    @echo "  just dev-run --help                 # Run with arguments"
-    @echo "  VERSION=v1.0.0 just release         # Create tagged release"
-    @echo ""
-    @echo "More info: https://github.com/casey/just"
+    cd "{{outdir}}"
+    manifest="{{name}}-{{version}}.sha256"
+    > "$manifest"
+
+    for f in {{name}}-{{version}}-*; do
+        [[ "$f" == *.sha256 ]] && continue
+        if   command -v sha256sum >/dev/null 2>&1; then sha256sum    "$f"
+        elif command -v shasum    >/dev/null 2>&1; then shasum -a 256 "$f"
+        else echo "[!!] no sha256sum or shasum"; exit 1
+        fi >> "$manifest"
+    done
+    echo "  [ok] checksums -> $manifest"
+
+# Verify built artifacts exist in dist/
+_verify *names:
+    #!/bin/bash
+    set -euo pipefail
+    ok=0
+    miss=0
+
+    for n in {{names}}; do
+        found=0
+        for ext in "" ".exe"; do
+            f="{{outdir}}/{{name}}-{{version}}-${n}${ext}"
+            if [ -f "$f" ]; then
+                size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
+                printf "  [ok]  %-42s %s bytes\n" "$(basename "$f")" "$size"
+                found=1
+                ok=$((ok + 1))
+                break
+            fi
+        done
+        [ $found -eq 0 ] && { printf "  [!!]  %-42s missing\n" "$n"; miss=$((miss + 1)); }
+    done
+
+    echo ""
+    [ $miss -gt 0 ] && { echo "  $ok ok, $miss missing"; exit 1; }
+    echo "  [ok] all $ok present"
