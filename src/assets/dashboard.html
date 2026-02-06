@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -58,7 +58,9 @@
         padding: 25px;
         box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
         border-left: 4px solid #3498db;
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        transition:
+          transform 0.3s ease,
+          box-shadow 0.3s ease;
       }
 
       .stat-card:hover {
@@ -235,7 +237,7 @@
                                 <div class="stat-card">
                                     <div class="stat-title">Total Messages</div>
                                     <div class="stat-value">${formatNumber(
-                                      stats.total_messages
+                                      stats.total_messages,
                                     )}</div>
                                     <div class="stat-unit">messages received</div>
                                 </div>
@@ -243,7 +245,7 @@
                                 <div class="stat-card">
                                     <div class="stat-title">Messages per Minute</div>
                                     <div class="stat-value">${formatNumber(
-                                      stats.messages_per_minute
+                                      stats.messages_per_minute,
                                     )}</div>
                                     <div class="stat-unit">messages/min</div>
                                 </div>
@@ -251,17 +253,17 @@
                                 <div class="stat-card">
                                     <div class="stat-title">Uptime</div>
                                     <div class="stat-value">${formatDuration(
-                                      stats.uptime_seconds
+                                      stats.uptime_seconds,
                                     )}</div>
                                     <div class="stat-unit">since ${formatDateTime(
-                                      stats.start_time
+                                      stats.start_time,
                                     )}</div>
                                 </div>
 
                                 <div class="stat-card">
                                     <div class="stat-title">Last Message</div>
                                     <div class="stat-value">${formatDateTime(
-                                      stats.last_message_time
+                                      stats.last_message_time,
                                     )}</div>
                                     <div class="stat-unit">timestamp</div>
                                 </div>
@@ -269,7 +271,7 @@
                                 <div class="stat-card">
                                     <div class="stat-title">Current Memory</div>
                                     <div class="stat-value">${formatMemory(
-                                      stats.memory_usage_mb
+                                      stats.memory_usage_mb,
                                     )}</div>
                                     <div class="stat-unit">MB</div>
                                 </div>
@@ -277,7 +279,7 @@
                                 <div class="stat-card">
                                     <div class="stat-title">Peak Memory</div>
                                     <div class="stat-value">${formatMemory(
-                                      stats.memory_peak_mb
+                                      stats.memory_peak_mb,
                                     )}</div>
                                     <div class="stat-unit">MB</div>
                                 </div>

@@ -46,14 +46,18 @@ static STATS: once_cell::sync::Lazy<Arc<RwLock<Stats>>> = once_cell::sync::Lazy:
     Arc::new(RwLock::new(stats))
 });
 
-fn get_memory_usage(sys: &mut System) -> (f64, f64) {
-    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-    if let Some(process) = sys.process(sysinfo::get_current_pid().unwrap()) {
+fn get_memory_usage(sys: &mut System, current_peak: f64) -> (f64, f64) {
+    let pid = match sysinfo::get_current_pid() {
+        Ok(pid) => pid,
+        Err(_) => return (0.0, current_peak),
+    };
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+    if let Some(process) = sys.process(pid) {
         let mem_mb = process.memory() as f64 / 1024.0 / 1024.0;
-        let peak_mb = process.virtual_memory() as f64 / 1024.0 / 1024.0;
+        let peak_mb = current_peak.max(mem_mb);
         return (mem_mb, peak_mb);
     }
-    (0.0, 0.0)
+    (0.0, current_peak)
 }
 
 pub async fn start(config: Arc<Config>) -> Result<()> {
@@ -79,11 +83,9 @@ pub async fn start(config: Arc<Config>) -> Result<()> {
             }
 
             // Update memory usage
-            let (current_memory, peak_memory) = get_memory_usage(&mut sys);
+            let (current_memory, peak_memory) = get_memory_usage(&mut sys, stats_guard.memory_peak_mb);
             stats_guard.memory_usage_mb = current_memory;
-            if peak_memory > stats_guard.memory_peak_mb {
-                stats_guard.memory_peak_mb = peak_memory;
-            }
+            stats_guard.memory_peak_mb = peak_memory;
         }
     });
 
