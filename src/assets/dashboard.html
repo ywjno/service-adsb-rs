@@ -179,7 +179,8 @@
     </div>
 
     <script>
-      let isOnline = false;
+      let socket = null;
+      let reconnectTimer = null;
 
       function formatNumber(num) {
         return new Intl.NumberFormat().format(num);
@@ -210,20 +211,17 @@
         return mb.toFixed(1);
       }
 
-      function updateStats() {
-        fetch("../api/stats")
-          .then((response) => {
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-          })
-          .then((data) => {
-            if (data.success && data.data) {
-              const stats = data.data;
-              isOnline = true;
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
 
-              document.getElementById("content").innerHTML = `
+      function renderStats(stats) {
+        document.getElementById("content").innerHTML = `
                             <div class="stats-grid">
                                 <div class="stat-card">
                                     <div class="stat-title">Service Status</div>
@@ -285,19 +283,16 @@
                                 </div>
                             </div>
                         `;
-            } else {
-              throw new Error(data.message || "Failed to load statistics");
-            }
-          })
-          .catch((error) => {
-            console.error("Error fetching stats:", error);
-            isOnline = false;
+        document.getElementById("last-update").textContent =
+          new Date().toLocaleString();
+      }
 
-            document.getElementById("content").innerHTML = `
+      function renderOffline(message) {
+        document.getElementById("content").innerHTML = `
                         <div class="error-message">
                             <strong>Connection Error</strong><br>
-                            Unable to fetch statistics from the service.<br>
-                            Error: ${error.message}
+                            Unable to receive statistics from the service.<br>
+                            Error: ${escapeHtml(message)}
                         </div>
                         <div class="stats-grid">
                             <div class="stat-card">
@@ -310,18 +305,46 @@
                             </div>
                         </div>
                     `;
-          })
-          .finally(() => {
-            document.getElementById("last-update").textContent =
-              new Date().toLocaleString();
-          });
       }
 
-      // Initial load
-      updateStats();
+      function scheduleReconnect() {
+        if (reconnectTimer) return;
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connectStatsSocket();
+        }, 3000);
+      }
 
-      // Update every 5 seconds
-      setInterval(updateStats, 5000);
+      function connectStatsSocket() {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        socket = new WebSocket(`${protocol}//${window.location.host}/ws/stats`);
+
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.success && data.data) {
+              renderStats(data.data);
+            } else {
+              throw new Error(data.message || "Failed to load statistics");
+            }
+          } catch (error) {
+            console.error("Error processing stats:", error);
+            renderOffline(error.message);
+          }
+        };
+
+        socket.onerror = () => {
+          renderOffline("WebSocket connection error");
+          socket.close();
+        };
+
+        socket.onclose = () => {
+          renderOffline("WebSocket disconnected. Reconnecting...");
+          scheduleReconnect();
+        };
+      }
+
+      connectStatsSocket();
     </script>
   </body>
 </html>

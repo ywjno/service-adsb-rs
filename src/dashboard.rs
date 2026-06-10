@@ -2,10 +2,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use log::info;
+use futures_util::{SinkExt, StreamExt};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use tokio::sync::RwLock;
+use warp::ws::{Message, WebSocket};
 use warp::{Filter, Rejection, Reply};
 
 use super::toml::Config;
@@ -91,17 +93,16 @@ pub async fn start(config: Arc<Config>) -> Result<()> {
 
     info!("Starting dashboard on port {port}");
 
-    // Build routes without CORS first
-    let stats_route = warp::path("api")
-        .and(warp::path("stats"))
+    let ws_route = warp::path!("ws" / "stats")
+        .and(warp::ws())
         .and(with_stats())
-        .and_then(get_stats);
+        .map(|ws: warp::ws::Ws, stats| ws.on_upgrade(move |socket| handle_stats_socket(socket, stats)));
 
     let index_route = warp::path("dashboard").and_then(serve_index);
 
-    let routes = stats_route
+    let routes = ws_route
         .or(index_route)
-        .with(warp::cors().allow_any_origin().allow_methods(vec!["GET", "POST"]));
+        .with(warp::cors().allow_any_origin().allow_methods(vec!["GET"]));
 
     // Start server in background and return immediately
     let serve_task = warp::serve(routes).run(([0, 0, 0, 0], port));
@@ -121,15 +122,56 @@ fn with_stats() -> impl Filter<Extract = (Arc<RwLock<Stats>>,), Error = std::con
     warp::any().map(move || STATS.clone())
 }
 
-async fn get_stats(stats: Arc<RwLock<Stats>>) -> Result<impl Reply, Rejection> {
+async fn handle_stats_socket(websocket: WebSocket, stats: Arc<RwLock<Stats>>) {
+    let (mut sender, mut receiver) = websocket.split();
+
+    if let Err(err) = send_stats_snapshot(&mut sender, &stats).await {
+        warn!("Failed to send initial dashboard stats: {err}");
+        return;
+    }
+
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+    interval.tick().await;
+
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                if let Err(err) = send_stats_snapshot(&mut sender, &stats).await {
+                    warn!("Dashboard WebSocket send error: {err}");
+                    break;
+                }
+            }
+            message = receiver.next() => {
+                match message {
+                    Some(Ok(message)) if message.is_close() => break,
+                    Some(Ok(_)) => {}
+                    Some(Err(err)) => {
+                        warn!("Dashboard WebSocket receive error: {err}");
+                        break;
+                    }
+                    None => break,
+                }
+            }
+        }
+    }
+}
+
+async fn send_stats_snapshot(
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    stats: &Arc<RwLock<Stats>>,
+) -> Result<(), warp::Error> {
     let stats_guard = stats.read().await;
     let response = ApiResponse {
         success: true,
         data: Some(stats_guard.clone()),
         message: "Stats retrieved successfully".to_string(),
     };
+    let payload = serde_json::to_string(&response).unwrap_or_else(|err| {
+        warn!("Failed to serialize dashboard stats: {err}");
+        r#"{"success":false,"data":null,"message":"Failed to serialize stats"}"#.to_string()
+    });
 
-    Ok(warp::reply::json(&response))
+    sender.send(Message::text(payload)).await
 }
 
 async fn serve_index() -> Result<impl Reply, Rejection> {

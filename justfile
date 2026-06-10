@@ -19,26 +19,32 @@ outdir  := "dist"
 # default
 # ---------------------------------------------------------------------------
 
+# Default recipe: show categorized manual output
 default: list
 
 # ---------------------------------------------------------------------------
 # Tier 1 - primary support
 # ---------------------------------------------------------------------------
 
+# Build all Tier 1 targets (Linux amd64/arm64, macOS universal2, Windows amd64)
 build-tier1: build-linux-amd64 build-linux-arm64 build-darwin-universal2 build-windows-amd64
 
 # Tier 1 minus macOS (for Linux, where macOS cross-compile is unavailable)
 build-tier1-no-darwin: build-linux-amd64 build-linux-arm64 build-windows-amd64
 
+# Build Linux x86_64 GNU target
 build-linux-amd64: check-deps
     @just _build x86_64-unknown-linux-gnu linux-amd64
 
+# Build Linux ARM64 GNU target
 build-linux-arm64: check-deps
     @just _build aarch64-unknown-linux-gnu linux-arm64
 
+# Build macOS Universal2 binary (Intel + Apple Silicon)
 build-darwin-universal2: check-deps
     @just _build-universal2
 
+# Build Windows x86_64 GNU target
 build-windows-amd64: check-deps
     @just _build x86_64-pc-windows-gnu windows-amd64
 
@@ -46,23 +52,30 @@ build-windows-amd64: check-deps
 # Tier 2 - secondary support
 # ---------------------------------------------------------------------------
 
+# Build all Tier 2 targets (secondary support matrix)
 build-tier2: build-linux-386 build-linux-armv6 build-linux-armv7 build-linux-riscv64 build-linux-loongarch build-windows-386
 
+# Build Linux i686 GNU target
 build-linux-386: check-deps
     @just _build i686-unknown-linux-gnu linux-386
 
+# Build Linux ARMv6 GNU target (e.g., Raspberry Pi Zero/1)
 build-linux-armv6: check-deps
     @just _build arm-unknown-linux-gnueabihf linux-armv6
 
+# Build Linux ARMv7 GNU target (e.g., Raspberry Pi 2/3)
 build-linux-armv7: check-deps
     @just _build armv7-unknown-linux-gnueabihf linux-armv7
 
+# Build Linux RISC-V 64 GNU target
 build-linux-riscv64: check-deps
     @just _build riscv64gc-unknown-linux-gnu linux-riscv64
 
+# Build Linux LoongArch64 GNU target
 build-linux-loongarch: check-deps
     @just _build loongarch64-unknown-linux-gnu linux-loongarch
 
+# Build Windows i686 GNU target
 build-windows-386: check-deps
     @just _build i686-pc-windows-gnu windows-386
 
@@ -70,23 +83,30 @@ build-windows-386: check-deps
 # musl - static binaries for Docker
 # ---------------------------------------------------------------------------
 
+# Build all Docker-ready static musl targets
 build-docker: build-linux-amd64-musl build-linux-arm64-musl build-linux-armv6-musl build-linux-armv7-musl build-linux-386-musl build-linux-riscv64-musl
 
+# Build Linux x86_64 musl static target
 build-linux-amd64-musl: check-deps
     @just _build x86_64-unknown-linux-musl linux-amd64-musl
 
+# Build Linux ARM64 musl static target
 build-linux-arm64-musl: check-deps
     @just _build aarch64-unknown-linux-musl linux-arm64-musl
 
+# Build Linux ARMv6 musl static target
 build-linux-armv6-musl: check-deps
     @just _build arm-unknown-linux-musleabihf linux-armv6-musl
 
+# Build Linux ARMv7 musl static target
 build-linux-armv7-musl: check-deps
     @just _build armv7-unknown-linux-musleabihf linux-armv7-musl
 
+# Build Linux i686 musl static target
 build-linux-386-musl: check-deps
     @just _build i686-unknown-linux-musl linux-386-musl
 
+# Build Linux RISC-V 64 musl static target
 build-linux-riscv64-musl: check-deps
     @just _build riscv64gc-unknown-linux-musl linux-riscv64-musl
 
@@ -94,13 +114,17 @@ build-linux-riscv64-musl: check-deps
 # Combo
 # ---------------------------------------------------------------------------
 
+# Build all Tier 1 and Tier 2 targets
 build-all: build-tier1 build-tier2
+
+# Build all ARM targets (v6, v7, arm64)
 build-arm: build-linux-armv6 build-linux-armv7 build-linux-arm64
 
 # ---------------------------------------------------------------------------
 # Release
 # ---------------------------------------------------------------------------
 
+# Create Tier 1 release artifacts (build + compress + checksums)
 release: build-tier1
     @just _compress
     @just _checksum
@@ -108,6 +132,7 @@ release: build-tier1
     @echo "  release {{version}} -> {{outdir}}/"
     @ls -lh {{outdir}}/
 
+# Create release artifacts for all targets (Tier 1 + Tier 2)
 release-all: build-all
     @just _compress
     @just _checksum
@@ -119,47 +144,59 @@ release-all: build-all
 # Development
 # ---------------------------------------------------------------------------
 
+# Build debug binary for current platform
 dev:
     @cargo build
     @echo "-> target/debug/{{name}}"
 
+# Run project in debug mode with optional arguments
 run *ARGS:
     @cargo run -- {{ARGS}}
 
+# Run test suite with all features
 test:
     @cargo test --all-features
 
+# Format all Rust source files
 fmt:
     @cargo fmt --all
 
+# Run clippy and treat warnings as errors
 lint:
     @cargo clippy --all-targets --all-features -- -D warnings
 
+# Generate project documentation (no dependencies)
 doc:
     @cargo doc --no-deps --all-features
 
+# Run full quality checks: fmt + lint + test + doc
 check: fmt lint test doc
 
 # ---------------------------------------------------------------------------
 # Verification
 # ---------------------------------------------------------------------------
 
+# Verify required Tier 1 artifacts exist in dist/
 verify-tier1:
     @just _verify linux-amd64 linux-arm64 darwin-universal2 windows-amd64
 
+# Verify required Tier 2 artifacts exist in dist/
 verify-tier2:
     @just _verify linux-386 linux-armv6 linux-armv7 linux-riscv64 linux-loongarch windows-386
 
+# Verify all expected artifacts exist in dist/
 verify-all: verify-tier1 verify-tier2
 
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
 
+# Remove Cargo build cache and dist output
 clean:
     @cargo clean
     @rm -rf {{outdir}}
 
+# Remove only dist output directory
 clean-dist:
     @rm -rf {{outdir}}
 
@@ -167,6 +204,7 @@ clean-dist:
 # Info
 # ---------------------------------------------------------------------------
 
+# Print categorized recipe guide with usage tips
 list:
     @echo ""
     @echo " {{name}} {{version}}"
@@ -217,6 +255,7 @@ list:
 # Internals
 # =============================================================================
 
+# Check required build dependencies (cargo, cargo-zigbuild, zig)
 check-deps:
     @command -v cargo          >/dev/null 2>&1 || { echo "[!!] cargo not found"; exit 1; }
     @command -v cargo-zigbuild >/dev/null 2>&1 || { echo "[!!] cargo-zigbuild missing - cargo install cargo-zigbuild"; exit 1; }

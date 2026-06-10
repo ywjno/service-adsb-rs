@@ -195,7 +195,7 @@ http://localhost:8080/dashboard
 - **Memory Monitoring**:
   - Current memory usage (MB)
   - Peak memory usage (MB)
-- **Auto-refresh**: Updates every 5 seconds
+- **WebSocket Updates**: Receives live statistics once per second
 
 ### Dashboard Screenshots
 
@@ -208,11 +208,11 @@ The dashboard features a modern, responsive design with:
 
 ## API Reference
 
-### GET `/api/stats`
+### GET `/ws/stats`
 
-Returns current service statistics in JSON format.
+Upgrades to a WebSocket connection and streams current service statistics as JSON text messages once per second.
 
-**Response Example:**
+**Message Example:**
 
 ```json
 {
@@ -232,7 +232,7 @@ Returns current service statistics in JSON format.
 
 ### GET `/dashboard`
 
-Serves the web dashboard HTML interface.
+Serves the web dashboard HTML interface. The dashboard connects to `/ws/stats` for live updates.
 
 ## Building from Source
 
