@@ -134,9 +134,9 @@ jobs:
         with:
           mise_toml: |
             [tools]
-            "github:rust-cross/cargo-zigbuild" = "latest"
-            just = "latest"
-            zig = "latest"
+            "github:rust-cross/cargo-zigbuild" = "0.22.3"
+            just = "1.52.0"
+            zig = "0.16.0"
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

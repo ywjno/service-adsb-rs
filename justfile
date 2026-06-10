@@ -153,10 +153,6 @@ dev:
 run *ARGS:
     @cargo run -- {{ARGS}}
 
-# Run test suite with all features
-test:
-    @cargo test --all-features
-
 # Format all Rust source files
 fmt:
     @cargo fmt --all
@@ -165,12 +161,20 @@ fmt:
 lint:
     @cargo clippy --all-targets --all-features -- -D warnings
 
+# Run test suite with all features
+test:
+    @cargo test --all-features
+
 # Generate project documentation (no dependencies)
 doc:
     @cargo doc --no-deps --all-features
 
 # Run full quality checks: fmt + lint + test + doc
-check: fmt lint test doc
+check:
+    @cargo fmt --all --check
+    @just lint
+    @just test
+    @just doc
 
 # ---------------------------------------------------------------------------
 # Verification
