@@ -1,5 +1,5 @@
 use std::io::{self, Write};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
@@ -16,14 +16,14 @@ use super::dashboard;
 use super::toml::Config;
 
 // Global HTTP client to avoid repeated creation
-lazy_static::lazy_static! {
-    static ref HTTP_CLIENT: Client = reqwest::Client::builder()
+static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| {
+    Client::builder()
         .tls_backend_rustls()
         .timeout(Duration::from_secs(30))
         .pool_max_idle_per_host(10)
         .build()
-        .expect("Failed to create HTTP client");
-}
+        .expect("Failed to create HTTP client")
+});
 
 pub async fn read(config: Arc<Config>) {
     let mut retry_count = 0;

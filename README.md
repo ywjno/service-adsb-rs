@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Rust](https://img.shields.io/badge/rust-1.93.0+-brightgreen.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.96.0+-brightgreen.svg)](https://www.rust-lang.org)
 
 A high-performance ADS-B (Automatic Dependent Surveillance-Broadcast) data processing service written in Rust. This service receives aircraft data via the SBS1 protocol, processes it, and uploads to remote services while providing a real-time web dashboard for monitoring.
 
@@ -36,8 +36,8 @@ A high-performance ADS-B (Automatic Dependent Surveillance-Broadcast) data proce
 
    ```bash
    # Example: Install dump1090 on Ubuntu/Debian
-   sudo apt install dump1090-mutability
-   sudo systemctl start dump1090-mutability
+   $ sudo apt install dump1090-mutability
+   $ sudo systemctl start dump1090-mutability
    ```
 
 2. **Download the latest release** from [Releases](../../releases) or build from source.
@@ -59,7 +59,7 @@ A high-performance ADS-B (Automatic Dependent Surveillance-Broadcast) data proce
 4. **Run the service**:
 
    ```bash
-   ./adsb --config=./conf.toml
+   $ ./adsb --config=./conf.toml
    ```
 
 5. **Access the dashboard**: Open http://localhost:8080/dashboard
@@ -101,7 +101,7 @@ Download the appropriate compressed archive for your platform from the [releases
 ### Option 2: Install with Cargo
 
 ```bash
-cargo install --git https://github.com/ywjno/service-adsb-rs
+$ cargo install --git https://github.com/ywjno/service-adsb-rs
 ```
 
 ### Option 3: Build from Source
@@ -130,7 +130,7 @@ dashboard_port = 8080   # Web dashboard port (default: 8080)
 **Run with config file:**
 
 ```bash
-./adsb --config=./conf.toml
+$ ./adsb --config=./conf.toml
 ```
 
 ### Command Line Arguments
@@ -138,7 +138,7 @@ dashboard_port = 8080   # Web dashboard port (default: 8080)
 For advanced users, you can configure everything via command-line:
 
 ```bash
-./adsb --receiver-ip 127.0.0.1 \
+$ ./adsb --receiver-ip 127.0.0.1 \
        --receiver-port 30003 \
        --service-url "https://your-service.com/api/upload" \
        --service-uuid "YOUR16CHARUUID1" \
@@ -167,13 +167,13 @@ Control logging level:
 
 ```bash
 # Show only errors
-RUST_LOG=error ./adsb --config=./conf.toml
+$ RUST_LOG=error ./adsb --config=./conf.toml
 
 # Show all debug info
-RUST_LOG=debug ./adsb --config=./conf.toml
+$ RUST_LOG=debug ./adsb --config=./conf.toml
 
 # Default: info level
-./adsb --config=./conf.toml
+$ ./adsb --config=./conf.toml
 ```
 
 ## Web Dashboard
@@ -238,7 +238,7 @@ Serves the web dashboard HTML interface. The dashboard connects to `/ws/stats` f
 
 ### Prerequisites
 
-- **Rust**: Minimum version 1.93.0
+- **Rust**: Minimum version 1.96.0
 - **Git**: For cloning the repository
 
 ### Build Steps
@@ -246,19 +246,20 @@ Serves the web dashboard HTML interface. The dashboard connects to `/ws/stats` f
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/ywjno/service-adsb-rs.git
-   cd service-adsb-rs
+   $ git clone https://github.com/ywjno/service-adsb-rs.git
+   $ cd service-adsb-rs
    ```
 
 2. **Build for your platform:**
 
    ```bash
-   cargo build --release
+   $ cargo build --release
    ```
 
 3. **Run the binary:**
+
    ```bash
-   ./target/release/adsb --help
+   $ ./target/release/adsb --help
    ```
 
 ## Cross-platform Builds
@@ -271,52 +272,52 @@ This project supports building for multiple architectures using the included `ju
 
    ```bash
    # Install cargo-zigbuild for cross-compilation
-   cargo install cargo-zigbuild
-
-   # Install just for build automation
-   cargo install just
+   $ cargo install cargo-zigbuild
 
    # Install zig (required by cargo-zigbuild)
-   pip3 install ziglang
+   $ pip3 install ziglang
+
+   # Install just for build automation
+   $ cargo install just
    ```
 
 2. **Verify installation:**
    ```bash
-   just --version
-   cargo zigbuild --version
+   $ cargo-zigbuild --version
+   $ just --version
    ```
 
 ### Build Commands
 
 ```bash
 # Build most common platforms (Linux, macOS, Windows x64)
-just
+$ just
 
 # Build all supported platforms
-just all-arch
+$ just all-arch
 
 # Build specific platform categories
-just build-all-linux     # All Linux architectures
-just build-all-darwin    # All macOS architectures
-just build-all-windows   # All Windows architectures
-just build-all-arm # All ARM architectures
+$ just build-all-linux     # All Linux architectures
+$ just build-all-darwin    # All macOS architectures
+$ just build-all-windows   # All Windows architectures
+$ just build-all-arm # All ARM architectures
 
 # Build individual platforms
-just build-linux-amd64              # Linux x64
-just build-windows-amd64            # Windows x64
-just build-universal2-apple-darwin  # macOS Universal (Intel + Apple Silicon)
-just build-linux-armv6              # Raspberry Pi Zero
-just build-linux-armv7              # Raspberry Pi 2/3
-just build-linux-arm64              # Raspberry Pi 4+, RK3588/RK3588S, RK3566/RK3568, RK3399
+$ just build-linux-amd64              # Linux x64
+$ just build-windows-amd64            # Windows x64
+$ just build-universal2-apple-darwin  # macOS Universal (Intel + Apple Silicon)
+$ just build-linux-armv6              # Raspberry Pi Zero
+$ just build-linux-armv7              # Raspberry Pi 2/3
+$ just build-linux-arm64              # Raspberry Pi 4+, RK3588/RK3588S, RK3566/RK3568, RK3399
 
 # Create release packages with checksums
-just release
+$ just release
 
 # Clean build artifacts
-just clean
+$ just clean
 
 # Show all available commands
-just help
+$ just help
 ```
 
 ### Supported Platforms
@@ -354,10 +355,10 @@ We welcome contributions! Please feel free to submit issues, feature requests, o
 
 ```bash
 # Watch for changes and rebuild
-cargo watch -x "run -- --config=./conf.toml"
+$ cargo watch -x "run -- --config=./conf.toml"
 
 # Run tests continuously
-cargo watch -x test
+$ cargo watch -x test
 ```
 
 ## License

@@ -1,4 +1,2 @@
 edition = "2024"
-group_imports = "StdExternalCrate"
-imports_granularity = "Module"
 max_width = 120
