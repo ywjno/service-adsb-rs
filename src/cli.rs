@@ -146,3 +146,53 @@ fn validate_config(config: &Config) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_config() -> Config {
+        Config::new(
+            Receiver::new("127.0.0.1".to_string(), 30_003),
+            Service::new("https://example.com/upload".to_string(), "ABCDEF1234567890".to_string()),
+            8080,
+        )
+    }
+
+    #[test]
+    fn uuid_must_be_16_alphanumeric_characters() {
+        assert!(is_valid_uuid("ABCDEF1234567890"));
+        assert!(!is_valid_uuid("short"));
+        assert!(!is_valid_uuid("ABCDEF12345678901"));
+        assert!(!is_valid_uuid("ABCDEF12345678!!"));
+    }
+
+    #[test]
+    fn valid_config_passes_validation() {
+        assert!(validate_config(&valid_config()).is_ok());
+    }
+
+    #[test]
+    fn config_validation_rejects_invalid_service_url() {
+        let mut config = valid_config();
+        config.service.url = "not-a-url".to_string();
+
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn config_validation_rejects_invalid_uuid() {
+        let mut config = valid_config();
+        config.service.uuid = "bad".to_string();
+
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn config_validation_rejects_zero_receiver_port() {
+        let mut config = valid_config();
+        config.receiver.port = 0;
+
+        assert!(validate_config(&config).is_err());
+    }
+}

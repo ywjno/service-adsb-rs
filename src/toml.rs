@@ -45,3 +45,26 @@ impl Service {
         Service { url, uuid }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_uses_default_dashboard_port_when_missing() {
+        let config: Config = ::toml::from_str(
+            r#"
+            [receiver]
+            ip = "127.0.0.1"
+            port = 30003
+
+            [service]
+            url = "https://example.com/upload"
+            uuid = "ABCDEF1234567890"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.dashboard_port, 8080);
+    }
+}
