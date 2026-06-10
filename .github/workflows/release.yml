@@ -264,7 +264,7 @@ jobs:
           # Create release notes
           echo "## What's New" > release_notes.md
           echo "" >> release_notes.md
-          echo "This release includes improvements to stability, performance, and cross-platform compatibility." >> release_notes.md
+          echo "This release improves CI reliability, release packaging, and cross-platform build support." >> release_notes.md
           echo "" >> release_notes.md
           echo "## Download Instructions" >> release_notes.md
           echo "" >> release_notes.md
